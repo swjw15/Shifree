@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Shifree</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 全域取色器（隱藏） -->
+<input type="color" id="globalColorPicker" style="position:fixed; left:0; top:0; width:1px; height:1px; opacity:0; pointer-events:none; z-index:-1;" tabindex="-1" aria-hidden="true">
+
+<!-- ========== 編輯模式 FAB ========== -->
+<div class="fab-menu" id="fabMenu">
+    <div class="fab-options" id="fabOptions">
+        <button class="fab-option" data-mode="add">
+            <span class="fab-option-label">快速新增</span>
+            <span class="fab-option-icon">➕</span>
+        </button>
+        <button class="fab-option" data-mode="delete">
+            <span class="fab-option-label">快速刪除</span>
+            <span class="fab-option-icon">➖</span>
+        </button>
+        <button class="fab-option" data-mode="normal">
+            <span class="fab-option-label">瀏覽</span>
+            <span class="fab-option-icon">👁</span>
+        </button>
+    </div>
+    <button class="fab-main" id="fabMain" aria-label="编辑模式">
+        <span class="fab-icon" id="fabIcon">✏️</span>
+    </button>
+</div>
+
+<header class="app-header">
+    <button class="menu-btn" id="menuBtn" aria-label="打开菜单">☰</button>
+    <span class="app-title">📅 排班表</span>
+</header>
+
+<aside class="drawer" id="drawer">
+    <div class="drawer-header">📅 排班表</div>
+    <nav class="drawer-nav">
+        <a href="#calendar" data-view="calendar" class="active">📅 排班日曆</a>
+        <a href="#template" data-view="template">🧩 自訂模板</a>
+        <a href="#quick"    data-view="quick">⚡ 快捷排班</a>
+        <a href="#backup"   data-view="backup">📦 備份</a>
+    </nav>
+</aside>
+<div class="overlay" id="drawerOverlay"></div>
+
+<main class="page">
+
+    <!-- ===== 日曆 ===== -->
+    <section id="view-calendar" class="view active">
+
+        <div class="edit-symbol-bar" id="editSymbolBar" style="display:none;">
+            <span class="edit-symbol-label" id="editSymbolBarLabel">選擇模板：</span>
+            <div class="edit-symbol-chips" id="editSymbolChips"></div>
+        </div>
+
+        <div class="edit-hint" id="editHint" style="display:none;"></div>
+
+        <section class="card">
+            <div class="cal-header">
+                <button class="btn btn-secondary" id="prevMonth">‹</button>
+                <h2 id="monthLabel"></h2>
+                <button class="btn btn-secondary" id="nextMonth">›</button>
+                <button class="btn btn-secondary" id="todayBtn">今天</button>
+            </div>
+            <div class="cal-weekdays">
+                <div>日</div><div>一</div><div>二</div><div>三</div>
+                <div>四</div><div>五</div><div>六</div>
+            </div>
+            <div class="cal-grid-wrap" id="calGridWrap">
+                <div class="cal-grid" id="calGrid"></div>
+            </div>
+        </section>
+    </section>
+
+    <!-- ===== 自訂模板 ===== -->
+    <section id="view-template" class="view">
+        <div class="card">
+            <div class="card-title">
+                <span>📚 我的模板</span>
+                <button class="btn btn-primary" id="addSymbolBtn">＋ 新增模板</button>
+            </div>
+            <p class="hint" style="margin-top:-6px; margin-bottom:14px;">
+                點一下模板即可編輯。
+            </p>
+            <div id="tplList" class="tpl-list"></div>
+        </div>
+    </section>
+
+    <!-- ===== 快捷排班 ===== -->
+    <section id="view-quick" class="view">
+        <div class="card">
+            <div class="card-title">📅 起始日期</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="startDate">從這一天開始，點下方模板按順序加入：</label>
+                    <input type="date" id="startDate">
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">📚 我的模板（點擊快速加入）</div>
+            <div class="quick-symbol-section">
+                <div class="quick-symbol-title">📌 請先在頁面上方選擇「起始日期」，再點下方模板</div>
+                <div class="quick-symbol-grid" id="quickSymbolGrid"></div>
+            </div>
+            <p class="hint" id="quickSymbolEmptyHint" style="display:none; margin-top:12px;">
+                你還沒有建立任何模板，請先到「🧩 自訂模板」頁面新增。
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span>📋 待加入日曆的行程 (<span id="rowCount">0</span> 筆)</span>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="exportCsvBtn">📤 匯出 CSV</button>
+                    <button class="btn btn-danger" id="clearTableBtn">清空</button>
+                    <button class="btn btn-success" id="commitBtn">📥 加入日曆</button>
+                </div>
+            </div>
+            <div class="table-scroll">
+                <table class="sch-table">
+                    <thead>
+                        <tr>
+                            <th style="width:42px; text-align:center;">顏色</th>
+                            <th style="width:80px;">簡稱</th>
+                            <th>名稱</th>
+                            <th style="width:135px;">日期</th>
+                            <th style="width:42px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 備份 ===== -->
+    <section id="view-backup" class="view">
+
+        <div class="card">
+            <div class="card-title">📥 備份資料</div>
+            <p class="hint" style="margin-top:-6px;">
+                選擇之前備份的 JSON 檔案，點擊「合併還原」：<br>
+                · <b>完全相同</b>的行程 → 跳過（不重複）<br>
+                · <b>有任何不同</b>的行程 → 加入<br>
+                · 現有資料<b>不會被刪除</b>
+            </p>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="backupStartDate">開始日期</label>
+                    <input type="date" id="backupStartDate">
+                </div>
+                <div class="form-group">
+                    <label for="backupEndDate">結束日期</label>
+                    <input type="date" id="backupEndDate">
+                </div>
+            </div>
+            <div class="btn-group" style="margin-top:12px;">
+                <button class="btn btn-primary" id="backupRangeBtn">📥 備份選定範圍</button>
+                <button class="btn btn-secondary" id="backupAllBtn">📥 備份全部日程</button>
+            </div>
+        </div>
+
+        <!-- CSV 匯出 -->
+        <div class="card">
+            <div class="card-title">📤 匯出 Google 日曆 CSV</div>
+            <p class="hint" style="margin-top:-6px;">
+                匯出的 CSV 可以直接匯入 Google 日曆。可選擇要匯出的日期範圍。
+            </p>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="csvStartDate">開始日期</label>
+                    <input type="date" id="csvStartDate">
+                </div>
+                <div class="form-group">
+                    <label for="csvEndDate">結束日期</label>
+                    <input type="date" id="csvEndDate">
+                </div>
+            </div>
+            <div class="btn-group" style="margin-top:12px;">
+                <button class="btn btn-success" id="csvRangeBtn">📤 匯出选定范围 CSV</button>
+                <button class="btn btn-secondary" id="csvAllBtn">📤 匯出全部 CSV</button>
+            </div>
+        </div>
+
+        <!-- 匯出 ICS -->
+        <div class="card">
+            <div class="card-title">📤 匯出 ICS（Google 日曆可匯入）</div>
+            <p class="hint" style="margin-top:-6px;">
+                ICS 是 Google 日曆的標準匯入格式。含日期、時間、名稱、備註。
+            </p>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="icsStartDate">開始日期</label>
+                    <input type="date" id="icsStartDate">
+                </div>
+                <div class="form-group">
+                    <label for="icsEndDate">結束日期</label>
+                    <input type="date" id="icsEndDate">
+                </div>
+            </div>
+            <div class="btn-group" style="margin-top:12px;">
+                <button class="btn btn-success" id="icsRangeBtn">📤 匯出选定范围 ICS</button>
+                <button class="btn btn-secondary" id="icsAllBtn">📤 匯出全部 ICS</button>
+            </div>
+        </div>
+
+        <!-- 还原 -->
+        <div class="card">
+            <div class="card-title">♻️ 還原備份</div>
+            <p class="hint" style="margin-top:-6px;">
+                ⚠️ 選擇之前備份的 JSON 檔案，還原時會<b>覆蓋現有的所有資料</b>（模板、行程、備註）。<br>
+                還原前建議先備份一次目前的資料。
+            </p>
+            <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none;">
+            <div class="btn-group">
+                <button class="btn btn-primary" id="chooseBackupBtn">📂 選擇備份檔案</button>
+                <button class="btn btn-primary" id="restoreBtn" style="display:none;">♻️ 合併還原</button>
+            </div>
+            <p class="hint" id="restoreFileName" style="margin-top:10px;"></p>
+        </div>
+
+        <!-- 從 ICS 還原 -->
+        <div class="card">
+            <div class="card-title">📥 從 Google 日曆還原（ICS）</div>
+            <p class="hint" style="margin-top:-6px;">
+                選擇從 Google 日曆匯出的 <b>.ics</b> 檔案（或本 App 匯出的 ICS）<br>
+                · 會嘗試依 Subject 對照現有模板<br>
+                · <b>完全相同</b>的行程 → 跳過<br>
+                · <b>有任何不同</b>的行程 → 加入<br>
+                · 現有資料<b>不會被刪除</b>
+            </p>
+            <input type="file" id="icsRestoreInput" accept=".ics,text/calendar" style="display:none;">
+            <div class="btn-group">
+                <button class="btn btn-primary" id="chooseIcsBtn">📂 選擇 ICS 檔案</button>
+                <button class="btn btn-danger" id="icsRestoreBtn" style="display:none;">📥 確認還原 ICS</button>
+            </div>
+
+        
+
+            <p class="hint" id="icsRestoreFileName" style="margin-top:10px;"></p>
+        </div>
+
+        <!-- 危險區 -->
+        <div class="card" style="border-color: #f5c6cb;">
+            <div class="card-title" style="color: var(--danger); border-bottom-color: #f5c6cb;">
+                ⚠️ 危險區
+            </div>
+            <p class="hint" style="margin-top:-6px;">
+                清除所有<b>已加入日曆</b>的行程。<br>
+                · 模板、每日備註<b>不會</b>被刪除<br>
+                · 待加入列表<b>不會</b>被刪除<br>
+                · 操作<b>無法復原</b>，建議先備份
+            </p>
+            <div class="btn-group">
+                <button class="btn btn-secondary" id="restorePaletteBtn">🎨 恢復預設色板</button>
+                <button class="btn btn-danger" id="wipeSchedulesBtn">🗑 清除所有已加入日程</button>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- ========== 日詳情彈出面板 ========== -->
+<aside class="day-panel" id="dayPanel">
+    <div class="day-panel-header">
+        <h2 id="dayTitle">請點選日期</h2>
+        <button class="btn-icon" id="openCustomEditorFromDay" title="新增自訂日程" style="font-size:22px; padding:4px 10px;">＋</button>
+        <button class="close-btn" id="closeDayPanel" aria-label="关闭">✕</button>
+    </div>
+    <div class="day-panel-body" id="dayPanelBody"></div>
+</aside>
+<div class="overlay" id="dayPanelOverlay"></div>
+
+<!-- ========== 模板編輯彈出面板 ========== -->
+<aside class="tpl-editor" id="tplEditor">
+    <div class="tpl-editor-header">
+        <h2 id="tplEditorTitle">新增模板</h2>
+        <button class="close-btn" id="closeTplEditor" aria-label="关闭">✕</button>
+    </div>
+    <div class="tpl-editor-body">
+        <div class="form-group">
+            <label>顏色</label>
+            <div class="tpl-color-grid" id="tplColorGrid"></div>
+        </div>
+        <div class="form-group">
+            <label for="tplSubjectInput">名稱</label>
+            <input type="text" id="tplSubjectInput" placeholder="例如 早班">
+        </div>
+        <div class="form-group">
+            <label for="tplCodeInput">簡稱（選填）</label>
+            <input type="text" id="tplCodeInput" placeholder="例如 A1" style="text-transform: uppercase;">
+        </div>
+        <div class="form-group">
+            <label for="tplStartInput">開始時間</label>
+            <input type="time" id="tplStartInput" value="09:00">
+        </div>
+        <div class="form-group">
+            <label for="tplEndInput">結束時間</label>
+            <input type="time" id="tplEndInput" value="18:00">
+        </div>
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="tplAllDayInput">
+                <span>整天（無具體時間）</span>
+            </label>
+        </div>
+    </div>
+    <div class="tpl-editor-footer">
+        <button class="btn btn-danger" id="deleteTplBtn" style="display:none;">🗑 刪除</button>
+        <span class="spacer"></span>
+        <button class="btn btn-secondary" id="cancelTplBtn">取消</button>
+        <button class="btn btn-primary" id="saveTplBtn">保存</button>
+    </div>
+</aside>
+<div class="overlay" id="tplEditorOverlay"></div>
+
+<!-- ========== 年月選擇器 ========== -->
+<aside class="ym-picker" id="ymPicker">
+    <div class="ym-picker-header">
+        <h2>選擇年月</h2>
+        <button class="close-btn" id="closeYmPicker" aria-label="关闭">✕</button>
+    </div>
+    <div class="ym-picker-body">
+        <div class="ym-year-row">
+            <button class="btn btn-secondary" id="ymPrevYear">‹</button>
+            <span class="ym-year-label" id="ymYearLabel">2026 年</span>
+            <button class="btn btn-secondary" id="ymNextYear">›</button>
+        </div>
+        <div class="ym-months" id="ymMonths"></div>
+    </div>
+    <div class="ym-picker-footer">
+        <button class="btn btn-secondary" id="ymTodayBtn">回到今天</button>
+    </div>
+</aside>
+<div class="overlay" id="ymPickerOverlay"></div>
+
+<!-- ========== 自訂日程彈出面板 ========== -->
+<aside class="custom-editor" id="customEditor">
+    <div class="custom-editor-header">
+        <h2 id="customEditorTitle">新增自訂日程</h2>
+        <button class="close-btn" id="closeCustomEditor" aria-label="关闭">✕</button>
+    </div>
+    <div class="custom-editor-body">
+        <div class="form-group">
+            <label>顏色</label>
+            <div class="tpl-color-grid" id="customColorGrid"></div>
+        </div>
+        <div class="form-group">
+            <label for="customDateInput">日期</label>
+            <input type="date" id="customDateInput">
+        </div>
+        <div class="form-group">
+            <label for="customSubjectInput">名稱</label>
+            <input type="text" id="customSubjectInput" placeholder="例如 開會">
+        </div>
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="customAllDayInput">
+                <span>整天（無具體時間）</span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="customStartInput">開始時間</label>
+            <input type="time" id="customStartInput" value="09:00">
+        </div>
+        <div class="form-group">
+            <label for="customEndInput">結束時間</label>
+            <input type="time" id="customEndInput" value="18:00">
+        </div>
+        <div class="form-group">
+            <label for="customNoteInput">備註（選填）</label>
+            <textarea id="customNoteInput" class="desc-input" placeholder="..."></textarea>
+        </div>
+    </div>
+    <div class="custom-editor-footer">
+        <button class="btn btn-danger" id="deleteCustomBtn" style="display:none;">🗑 刪除</button>
+        <span class="spacer"></span>
+        <button class="btn btn-secondary" id="cancelCustomBtn">取消</button>
+        <button class="btn btn-primary" id="saveCustomBtn">保存</button>
+    </div>
+</aside>
+<div class="overlay" id="customEditorOverlay"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
