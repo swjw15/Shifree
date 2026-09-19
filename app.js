@@ -433,8 +433,8 @@ function exportSchedulesToCSV(startDate, endDate) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    let filename = '排班表_' + todayStr() + '.csv';
-    if (startDate && endDate) filename = '排班表_' + startDate + '_至_' + endDate + '.csv';
+    let filename = 'Shifree_' + todayStr() + '.csv';
+    if (startDate && endDate) filename = 'Shifree_' + startDate + '_至_' + endDate + '.csv';
     a.download = filename;
     document.body.appendChild(a);
     a.click();
@@ -2158,8 +2158,8 @@ function backupRange() {
     });
 
     const backup = {
-        version: 1,
-        appName: '排班表',
+        version: 1.0,
+        appName: 'Shifree',
         exportDate: new Date().toISOString(),
         type: 'range',
         range: { start: start, end: end },
@@ -2170,14 +2170,14 @@ function backupRange() {
         staging: AppData.staging || []
     };
 
-    downloadJsonFile(backup, '排班表备份_' + start + '_至_' + end + '.json');
-    alert('✅ 已备份 ' + schedulesInRange.length + ' 筆行程（' + start + ' ~ ' + end + '）');
+    downloadJsonFile(backup, 'Shifree備份_' + start + '_至_' + end + '.json');
+    alert('✅ 已備份 ' + schedulesInRange.length + ' 筆行程（' + start + ' ~ ' + end + '）');
 }
 
 function backupAll() {
     const backup = {
         version: 1,
-        appName: '排班表',
+        appName: 'Shifree',
         exportDate: new Date().toISOString(),
         type: 'all',
         symbols: AppData.symbols,
@@ -2187,8 +2187,8 @@ function backupAll() {
         staging: AppData.staging || []
     };
 
-    downloadJsonFile(backup, '排班表备份_全部_' + todayStr() + '.json');
-    alert('✅ 已备份全部 ' + AppData.schedules.length + ' 筆行程');
+    downloadJsonFile(backup, 'Shifree備份_全部_' + todayStr() + '.json');
+    alert('✅ 已備份全部 ' + AppData.schedules.length + ' 筆行程');
 }
 
 /* ----- 還原 ----- */
@@ -2700,7 +2700,7 @@ function exportSchedulesToICS(startDate, endDate) {
     const lines = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:-//ShiftApp//排班表//ZH-TW',
+        'PRODID:-//ShiftApp//Shifree//ZH-TW',
         'CALSCALE:GREGORIAN'
     ];
 
@@ -2730,8 +2730,8 @@ function exportSchedulesToICS(startDate, endDate) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    let filename = '排班表_' + todayStr() + '.ics';
-    if (startDate && endDate) filename = '排班表_' + startDate + '_至_' + endDate + '.ics';
+    let filename = 'Shifree_' + todayStr() + '.ics';
+    if (startDate && endDate) filename = 'Shifree_' + startDate + '_至_' + endDate + '.ics';
     a.download = filename;
     document.body.appendChild(a);
     a.click();
