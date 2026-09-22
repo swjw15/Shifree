@@ -148,9 +148,10 @@
             <div class="card-title">📥 備份資料</div>
             <p class="hint" style="margin-top:-6px;">
                 選擇之前備份的 JSON 檔案，點擊「合併還原」：<br>
-                · <b>完全相同</b>的行程 → 跳過（不重複）<br>
-                · <b>有任何不同</b>的行程 → 加入<br>
-                · 現有資料<b>不會被刪除</b>
+                <b>完全相同</b>的行程 → 跳過（不重複）<br>
+                <b>有任何不同</b>的行程 → 加入<br>
+                現有資料<b>不會被刪除</b><br>
+                <b>備份內容包含：自訂模板、行程、每日備註</b>
             </p>
             <div class="form-grid">
                 <div class="form-group">
@@ -248,22 +249,24 @@
             <p class="hint" id="icsRestoreFileName" style="margin-top:10px;"></p>
         </div>
 
-        <!-- 危險區 -->
-        <div class="card" style="border-color: #f5c6cb;">
-            <div class="card-title" style="color: var(--danger); border-bottom-color: #f5c6cb;">
-                ⚠️ 危險區
-            </div>
-            <p class="hint" style="margin-top:-6px;">
-                清除所有<b>已加入日曆</b>的行程。<br>
-                · 模板、每日備註<b>不會</b>被刪除<br>
-                · 待加入列表<b>不會</b>被刪除<br>
-                · 操作<b>無法復原</b>，建議先備份
-            </p>
-            <div class="btn-group">
-                <button class="btn btn-secondary" id="restorePaletteBtn">🎨 恢復預設色板</button>
-                <button class="btn btn-danger" id="wipeSchedulesBtn">🗑 清除所有已加入日程</button>
-            </div>
-        </div>
+<!-- 危險區 -->
+<div class="card" style="border-color: #f5c6cb;">
+    <div class="card-title" style="color: var(--danger); border-bottom-color: #f5c6cb;">
+        ⚠️ 危險區
+    </div>
+    <p class="hint" style="margin-top:-6px;">
+        以下操作<b>無法復原</b>，建議先備份。<br>
+        · 清除日程：只刪除已加入日曆的行程，模板與備註保留<br>
+        · 清除備註：只刪除每日備註，行程與模板保留<br>
+        · 清除模板：只刪除模板，已加入的行程與備註保留
+    </p>
+    <div class="btn-group">
+        <button class="btn btn-secondary" id="restorePaletteBtn">🎨 恢復預設色板</button>
+        <button class="btn btn-danger" id="wipeDayNotesBtn">🗑 清除所有本日備註</button>
+        <button class="btn btn-danger" id="wipeTemplatesBtn">🗑 清除所有模板</button>
+        <button class="btn btn-danger" id="wipeSchedulesBtn">🗑 清除所有已加入日程</button>
+    </div>
+</div>
     </section>
 
 </main>
@@ -354,8 +357,12 @@
             <div class="tpl-color-grid" id="customColorGrid"></div>
         </div>
         <div class="form-group">
-            <label for="customDateInput">日期</label>
+            <label for="customDateInput">開始日期</label>
             <input type="date" id="customDateInput">
+        </div>
+        <div class="form-group">
+            <label for="customEndDateInput">結束日期（選填，跨多日活動用）</label>
+            <input type="date" id="customEndDateInput">
         </div>
         <div class="form-group">
             <label for="customSubjectInput">名稱</label>

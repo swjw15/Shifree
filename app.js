@@ -274,17 +274,20 @@ function applyScheduleColor(role, id, color) {
 function makeColorPickerHtml(role, targetId, currentColor) {
     const color = currentColor || DEFAULT_COLOR;
     let dots = '';
+    
+    function addColorDot(c) {
+        const isSelected = (c === color);
+        dots += '<span class="color-option' + (isSelected ? ' selected' : '') + '" data-color="' + c + '" style="background:' + c + '" title="長按可刪除"></span>';
+    }
+    
     // 預設色（可長按 / 右鍵刪除）
-    getPalette().forEach(function (c) {
-        dots += '<span class="color-option" data-color="' + c + '" style="background:' + c + '" title="長按可刪除"></span>';
-    });
+    getPalette().forEach(addColorDot);
     // 自訂色（可長按 / 右鍵刪除）
-    (AppData.customColors || []).forEach(function (c) {
-        dots += '<span class="color-option" data-color="' + c + '" style="background:' + c + '" title="長按可刪除"></span>';
-    });
+    (AppData.customColors || []).forEach(addColorDot);
+    
     // 🎨 新增自訂顏色
     dots += '<span class="color-option color-custom" data-custom="1" title="新增自訂顏色">🎨</span>';
-
+    
     const extraAttrs = role === 'symbol-color'
         ? ' data-code="' + escapeHtml(targetId) + '"'
         : ' data-id="' + escapeHtml(targetId) + '"';
@@ -377,7 +380,21 @@ function getDateRange(startDate, endDate) {
    ============================================================ */
 function getSchedulesByDate(dateStr) {
     return AppData.schedules
-        .filter(function (s) { return s.date === dateStr; })
+        .filter(function (s) {
+            const start = s.date;
+            let end = s.endDate || s.date;
+
+            // 非全天活動：若結束時間為 00:00，代表活動在「結束日的午夜整點」結束
+            // 這種情況應視為前一天的活動，不顯示在結束日
+            if (!s.allDay && s.endTime === '00:00' && end > start) {
+                const adjustedEnd = addDays(end, -1);
+                if (adjustedEnd >= start) {
+                    end = adjustedEnd;
+                }
+            }
+
+            return dateStr >= start && dateStr <= end;
+        })
         .sort(function (a, b) {
             if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
@@ -385,11 +402,13 @@ function getSchedulesByDate(dateStr) {
 }
 function addSchedule(entry) {
     const item = Object.assign({
-        id: uid('sch'), date: todayStr(), subject: '',
+        id: uid('sch'), date: todayStr(), endDate: '', subject: '',
         startTime: '', endTime: '', allDay: false, note: '',
         symbol: '', color: DEFAULT_COLOR
     }, entry);
     if (!item.color) item.color = DEFAULT_COLOR;
+    // 若沒給 endDate，預設與 date 相同（單日活動）
+    if (!item.endDate) item.endDate = item.date;
     AppData.schedules.push(item);
     saveData();
     return item;
@@ -416,18 +435,19 @@ function exportSchedulesToCSV(startDate, endDate) {
     const headers = ['Subject','Start Date','Start Time','End Date','End Time','All Day Event','Description','Location','Private'];
     const rows = [headers.join(',')];
     data.slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).forEach(function (item) {
-        const d = formatDateForGoogle(item.date);
-        rows.push([
-            '"' + String(item.subject).replace(/"/g, '""') + '"',
-            '"' + d + '"',
-            '"' + (item.allDay ? '' : item.startTime) + '"',
-            '"' + d + '"',
-            '"' + (item.allDay ? '' : item.endTime) + '"',
-            '"' + (item.allDay ? 'TRUE' : 'FALSE') + '"',
-            '"' + String(item.note || '').replace(/"/g, '""') + '"',
-            '""', '"FALSE"'
-        ].join(','));
-    });
+    const startD = formatDateForGoogle(item.date);
+    const endD = formatDateForGoogle(item.endDate || item.date);
+    rows.push([
+        '"' + String(item.subject).replace(/"/g, '""') + '"',
+        '"' + startD + '"',
+        '"' + (item.allDay ? '' : item.startTime) + '"',
+        '"' + endD + '"',
+        '"' + (item.allDay ? '' : item.endTime) + '"',
+        '"' + (item.allDay ? 'TRUE' : 'FALSE') + '"',
+        '"' + String(item.note || '').replace(/"/g, '""') + '"',
+        '""', '"FALSE"'
+    ].join(','));
+});
     const csv = '\uFEFF' + rows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -643,7 +663,15 @@ function layoutTimedEvents(timed) {
     const events = timed.map(function (s) {
         const start = timeToMinutes(s.startTime);
         let end = timeToMinutes(s.endTime);
+
+        // 結束時間為 00:00 → 視為當天的 24:00（1440 分鐘）
+        if (s.endTime === '00:00') {
+            end = 1440;
+        }
+
+        // 如果結束時間早於或等於開始時間，給一個預設長度
         if (end <= start) end = start + 60;
+
         return {
             scheduleId: s.id,
             customized: !!s.customized,
@@ -655,7 +683,7 @@ function layoutTimedEvents(timed) {
             col: 0, totalCols: 1
         };
     });
-    events.sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+        events.sort(function (a, b) { return a.start - b.start || a.end - b.end; });
 
     const clusters = [];
     let currentCluster = [], clusterEnd = -1;
@@ -723,12 +751,27 @@ function buildTimelineHtml(list) {
 function buildScheduleCardHtml(s) {
     const color = s.color || DEFAULT_COLOR;
     const customizedMark = s.customized ? ' <span style="font-size:10px; opacity:0.6;">✏️</span>' : '';
+    const sEnd = s.endDate || s.date;
+    const isMultiDay = sEnd !== s.date;
+
+    // 結束時間為 00:00 時，顯示為 24:00 更直覺
+    let displayEnd = s.endTime;
+    if (!s.allDay && s.endTime === '00:00') displayEnd = '24:00';
+    const timeStr = s.allDay ? '整天' : (s.startTime + ' – ' + displayEnd);
+
+    const dateRangeStr = isMultiDay
+        ? '<div class="sch-date-range" style="font-size:11px; color:var(--primary);">📅 ' + s.date + ' ~ ' + sEnd + '</div>'
+        : '';
+
     return '<div class="sch-card" data-schedule-id="' + escapeHtml(s.id) + '">' +
         '<div class="sch-color">' + makeColorPickerHtml('schedule-color', s.id, color) + '</div>' +
-        '<div class="sch-main"><div class="sch-subject">' + escapeHtml(s.subject) + customizedMark + '</div>' +
-        '<div class="sch-time">' + (s.allDay ? '整天' : s.startTime + ' – ' + s.endTime) + '</div></div>' +
-        '<button class="btn-icon danger" data-del="' + s.id + '" title="刪除">✕</button>' +
-        '<textarea class="desc-input sch-note" data-note="' + s.id + '" placeholder="加入備註...">' + escapeHtml(s.note || '') + '</textarea></div>';
+        '<div class="sch-main">' +
+            '<div class="sch-subject">' + escapeHtml(s.subject) + customizedMark + '</div>' +
+            dateRangeStr +
+            '<div class="sch-time">' + timeStr + '</div>' +
+        '</div>' +
+        '<button class="btn-icon danger" data-del="' + escapeHtml(s.id) + '" title="刪除">✕</button>' +
+        '<textarea class="desc-input sch-note" data-note="' + escapeHtml(s.id) + '" placeholder="加入備註...">' + escapeHtml(s.note || '') + '</textarea></div>';
 }
 
 function renderDayPanel() {
@@ -978,19 +1021,20 @@ function quickAddToDates(symbol, dates) {
 
 function quickDeleteDates(symbol, dates) {
     const before = AppData.schedules.length;
+    function overlaps(s) {
+        const sEnd = s.endDate || s.date;
+        return dates.some(function (d) { return d >= s.date && d <= sEnd; });
+    }
     if (symbol) {
-        // 只刪除「該日期範圍內」且「symbol 相同」的排班
-        // 但跳過已自訂的（customized === true）
         AppData.schedules = AppData.schedules.filter(function (s) {
             if (s.customized) return true;
-            return !(dates.indexOf(s.date) !== -1 && s.symbol === symbol);
+            if (s.symbol !== symbol) return true;
+            return !overlaps(s);
         });
     } else {
-        // 未指定模板：刪除範圍內所有排班
-        // 但跳過已自訂的（customized === true）
         AppData.schedules = AppData.schedules.filter(function (s) {
             if (s.customized) return true;
-            return dates.indexOf(s.date) === -1;
+            return !overlaps(s);
         });
     }
     if (AppData.schedules.length !== before) saveData();
@@ -1881,31 +1925,34 @@ function openCustomEditor(prefill) {
     const deleteBtn = document.getElementById('deleteCustomBtn');
 
     // 判斷是編輯模式還是新增模式
-    if (prefill.scheduleId) {
-        const item = AppData.schedules.find(function (s) { return s.id === prefill.scheduleId; });
-        if (!item) { alert('找不到这筆排班'); return; }
-        editingCustomId = item.id;
-        document.getElementById('customEditorTitle').textContent = '编辑日程';
-        document.getElementById('customDateInput').value = item.date;
-        document.getElementById('customSubjectInput').value = item.subject || '';
-        document.getElementById('customStartInput').value = item.startTime || '09:00';
-        document.getElementById('customEndInput').value = item.endTime || '18:00';
-        document.getElementById('customAllDayInput').checked = !!item.allDay;
-        document.getElementById('customNoteInput').value = item.note || '';
-        selectedCustomColor = item.color || DEFAULT_COLOR;
-        deleteBtn.style.display = 'inline-block';
-    } else {
-        editingCustomId = null;
-        document.getElementById('customEditorTitle').textContent = '新增日程';
-        document.getElementById('customDateInput').value = prefill.date || selectedDate || todayStr();
-        document.getElementById('customSubjectInput').value = prefill.subject || '';
-        document.getElementById('customStartInput').value = prefill.startTime || '09:00';
-        document.getElementById('customEndInput').value = prefill.endTime || '18:00';
-        document.getElementById('customAllDayInput').checked = !!prefill.allDay;
-        document.getElementById('customNoteInput').value = prefill.note || '';
-        selectedCustomColor = prefill.color || DEFAULT_COLOR;
-        deleteBtn.style.display = 'none';
-    }
+if (prefill.scheduleId) {
+    const item = AppData.schedules.find(function (s) { return s.id === prefill.scheduleId; });
+    if (!item) { alert('找不到这筆排班'); return; }
+    editingCustomId = item.id;
+    document.getElementById('customEditorTitle').textContent = '编辑日程';
+    document.getElementById('customDateInput').value = item.date;
+    document.getElementById('customEndDateInput').value = item.endDate || item.date; // 👈 新增
+    document.getElementById('customSubjectInput').value = item.subject || '';
+    document.getElementById('customStartInput').value = item.startTime || '09:00';
+    document.getElementById('customEndInput').value = item.endTime || '18:00';
+    document.getElementById('customAllDayInput').checked = !!item.allDay;
+    document.getElementById('customNoteInput').value = item.note || '';
+    selectedCustomColor = item.color || DEFAULT_COLOR;
+    deleteBtn.style.display = 'inline-block';
+} else {
+    editingCustomId = null;
+    document.getElementById('customEditorTitle').textContent = '新增日程';
+    const baseDate = prefill.date || selectedDate || todayStr();
+    document.getElementById('customDateInput').value = baseDate;
+    document.getElementById('customEndDateInput').value = baseDate; // 👈 新增
+    document.getElementById('customSubjectInput').value = prefill.subject || '';
+    document.getElementById('customStartInput').value = prefill.startTime || '09:00';
+    document.getElementById('customEndInput').value = prefill.endTime || '18:00';
+    document.getElementById('customAllDayInput').checked = !!prefill.allDay;
+    document.getElementById('customNoteInput').value = prefill.note || '';
+    selectedCustomColor = prefill.color || DEFAULT_COLOR;
+    deleteBtn.style.display = 'none';
+}
 
     renderCustomColorGrid();
     updateCustomTimeDisabled();
@@ -1930,40 +1977,49 @@ function updateCustomTimeDisabled() {
 
 function saveCustomSchedule() {
     const date = document.getElementById('customDateInput').value;
+    let endDate = document.getElementById('customEndDateInput').value;
     const subject = document.getElementById('customSubjectInput').value.trim();
     const start = document.getElementById('customStartInput').value;
     const end = document.getElementById('customEndInput').value;
     const allDay = document.getElementById('customAllDayInput').checked;
     const note = document.getElementById('customNoteInput').value;
 
-    if (!date) { alert('請選擇日期'); return; }
+    if (!date) { alert('請選擇開始日期'); return; }
     if (!subject) { alert('请输入名稱'); return; }
 
+    // 若沒填結束日期，或結束日期早於開始日期 → 視為單日活動
+    if (!endDate || endDate < date) endDate = date;
+
+    // 若結束時間為 00:00 且結束日期晚於開始日期一天，視為單日活動
+    if (!allDay && end === '00:00' && endDate === addDays(date, 1)) {
+        endDate = date;
+    }
+
     if (editingCustomId) {
-        // 編輯既有日程
         const item = AppData.schedules.find(function (s) { return s.id === editingCustomId; });
         if (!item) { alert('找不到这筆排班'); closeCustomEditor(); return; }
         item.date = date;
+        item.endDate = endDate;
         item.subject = subject;
         item.startTime = allDay ? '' : start;
         item.endTime = allDay ? '' : end;
         item.allDay = allDay;
         item.note = note;
         item.color = selectedCustomColor;
-        item.customized = true;   // ← 標記為已自訂
+        item.customized = true;
         saveData();
     } else {
-        // 新增日程
         addSchedule({
             symbol: '',
             subject: subject,
             date: date,
+            endDate: endDate,
             startTime: allDay ? '' : start,
             endTime: allDay ? '' : end,
             allDay: allDay,
             note: note,
             color: selectedCustomColor,
-            customized: true      // ← 從頭就是自訂的
+            customized: true
         });
     }
 
@@ -2232,6 +2288,7 @@ function handleBackupFileSelect(e) {
 function scheduleKey(s) {
     return [
         s.date || '',
+        s.endDate || '',
         s.symbol || '',
         s.subject || '',
         s.startTime || '',
@@ -2344,6 +2401,7 @@ function parseCSVToSchedules(text) {
         schedules.push({
             id: uid('sch'),
             date: startDateISO,
+            endDate: endDateISO,
             symbol: symbol || '',
             subject: subject,
             startTime: startTime,
@@ -2461,6 +2519,17 @@ function parseIcsDate(value) {
     const mm = timeMatch[2];
     const ss = timeMatch[3];
 
+    // 處理 24:00 的特殊情況（視為次日 00:00）
+    if (hh === '24') {
+        const nextDay = addDays(dateMatch[1] + '-' + dateMatch[2] + '-' + dateMatch[3], 1);
+        const p = nextDay.split('-');
+        return {
+            date: p[0] + '-' + p[1] + '-' + p[2],
+            time: '00:00',
+            allDay: false
+        };
+    }
+
     if (isUTC) {
         // UTC → 本地時區轉換
         const utcDate = new Date(Date.UTC(
@@ -2526,34 +2595,51 @@ function parseIcsToSchedules(text) {
             return;
         }
         if (line === 'END:VEVENT') {
-            if (current && current.summary && current.dtstart) {
-                const start = parseIcsDate(current.dtstart);
-                if (start) {
-                    // 全日活動：Google 的 DTEND 是「隔天」，所以不用
-                    // 非全日：用 DTEND 或預設 +1 小時
-                    let endTime = '';
-                    if (!start.allDay && current.dtend) {
-                        const endParsed = parseIcsDate(current.dtend);
-                        if (endParsed) endTime = endParsed.time;
-                    }
-                    const symbol = findSymbolBySubject(current.summary);
-                    const color = (symbol && AppData.symbols[symbol] && AppData.symbols[symbol].color)
-                        ? AppData.symbols[symbol].color
-                        : DEFAULT_COLOR;
-                    schedules.push({
-                        id: uid('sch'),
-                        date: start.date,
-                        symbol: symbol || '',
-                        subject: current.summary,
-                        startTime: start.allDay ? '' : start.time,
-                        endTime: endTime,
-                        allDay: start.allDay,
-                        note: current.description || '',
-                        color: color,
-                        customized: !symbol
-                    });
+if (current && current.summary && current.dtstart) {
+    const start = parseIcsDate(current.dtstart);
+    if (start) {
+        let endDate = start.date;   // 預設單日
+        let endTime = '';
+
+        if (current.dtend) {
+            const endParsed = parseIcsDate(current.dtend);
+            if (endParsed) {
+                if (start.allDay) {
+                    // 全日活動：ICS 規範 DTEND 是「結束日的隔天」（排他性）
+                    // 所以真正的結束日 = DTEND - 1 天
+                    endDate = addDays(endParsed.date, -1);
+                    // 若 DTEND 等於 DTSTART（異常狀況），就視為單日
+                    if (endDate < start.date) endDate = start.date;
+                } else {
+                    // 定時活動：DTEND 的日期就是結束日期
+                    endDate = endParsed.date;
+                    endTime = endParsed.time;
+                    // 若結束日早於開始日（異常），退回單日
+                    if (endDate < start.date) endDate = start.date;
                 }
             }
+        }
+
+        const symbol = findSymbolBySubject(current.summary);
+        const color = (symbol && AppData.symbols[symbol] && AppData.symbols[symbol].color)
+            ? AppData.symbols[symbol].color
+            : DEFAULT_COLOR;
+
+        schedules.push({
+            id: uid('sch'),
+            date: start.date,
+            endDate: endDate,          // 👈 新增
+            symbol: symbol || '',
+            subject: current.summary,
+            startTime: start.allDay ? '' : start.time,
+            endTime: endTime,
+            allDay: start.allDay,
+            note: current.description || '',
+            color: color,
+            customized: !symbol
+        });
+    }
+}
             current = null;
             inEvent = false;
             return;
@@ -2705,23 +2791,24 @@ function exportSchedulesToICS(startDate, endDate) {
     ];
 
     data.forEach(function (item) {
-        lines.push('BEGIN:VEVENT');
-        lines.push('UID:' + item.id + '@shiftapp');
-        lines.push('DTSTAMP:' + stamp);
-        if (item.allDay) {
-            // 全日：DTSTART 是當天，DTEND 是隔天（ICS 規範）
-            lines.push('DTSTART;VALUE=DATE:' + icsDate(item.date, ''));
-            lines.push('DTEND;VALUE=DATE:' + icsDate(addDaysISO(item.date, 1), ''));
-        } else {
-            lines.push('DTSTART:' + icsDate(item.date, item.startTime || '09:00'));
-            lines.push('DTEND:' + icsDate(item.date, item.endTime || '18:00'));
-        }
-        lines.push('SUMMARY:' + escapeIcs(item.subject));
-        if (item.note) {
-            lines.push('DESCRIPTION:' + escapeIcs(item.note));
-        }
-        lines.push('END:VEVENT');
-    });
+    const sEnd = item.endDate || item.date;
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:' + item.id + '@shiftapp');
+    lines.push('DTSTAMP:' + stamp);
+    if (item.allDay) {
+        // 全日活動：DTEND 是結束日的隔天
+        lines.push('DTSTART;VALUE=DATE:' + icsDate(item.date, ''));
+        lines.push('DTEND;VALUE=DATE:' + icsDate(addDaysISO(sEnd, 1), ''));
+    } else {
+        lines.push('DTSTART:' + icsDate(item.date, item.startTime || '09:00'));
+        lines.push('DTEND:' + icsDate(sEnd, item.endTime || '18:00'));
+    }
+    lines.push('SUMMARY:' + escapeIcs(item.subject));
+    if (item.note) {
+        lines.push('DESCRIPTION:' + escapeIcs(item.note));
+    }
+    lines.push('END:VEVENT');
+});
 
     lines.push('END:VCALENDAR');
 
@@ -2968,8 +3055,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('addSymbolBtn').addEventListener('click', function () { openTplEditor(null); });
     initTemplateDrag();
     document.getElementById('openCustomEditorFromDay').addEventListener('click', function () {
-        openCustomEditor({ date: selectedDate });
-    });
+    openCustomEditor({ date: selectedDate });
+});
     document.getElementById('closeCustomEditor').addEventListener('click', closeCustomEditor);
     document.getElementById('customEditorOverlay').addEventListener('click', closeCustomEditor);
     document.getElementById('cancelCustomBtn').addEventListener('click', closeCustomEditor);
@@ -3111,6 +3198,59 @@ document.addEventListener('DOMContentLoaded', function () {
 
         alert('✅ 已清除 ' + count + ' 筆日程');
     });
+
+    // 清除所有本日備註
+document.getElementById('wipeDayNotesBtn').addEventListener('click', function () {
+    const count = Object.keys(AppData.dayNotes).length;
+    if (!count) {
+        alert('目前沒有任何本日備註');
+        return;
+    }
+    if (!confirm('⚠️ 確定要清除所有本日備註嗎？\n\n共 ' + count + ' 天的備註\n\n' +
+                 '· 模板、行程都不會被刪除\n' +
+                 '· 此操作無法復原，建議先備份')) return;
+    if (!confirm('再次確認：真的要清除全部 ' + count + ' 天的備註嗎？')) return;
+
+    AppData.dayNotes = {};
+    saveData();
+
+    renderCalendar();
+    if (selectedDate) renderDayPanel();
+
+    alert('✅ 已清除 ' + count + ' 天的本日備註');
+});
+
+// 清除所有自訂模板
+document.getElementById('wipeTemplatesBtn').addEventListener('click', function () {
+    const count = Object.keys(AppData.symbols).length;
+    if (!count) {
+        alert('目前沒有任何模板');
+        return;
+    }
+    if (!confirm('⚠️ 確定要清除所有模板嗎？\n\n共 ' + count + ' 個模板\n\n' +
+                 '· 已加入日曆的行程會被保留（保留原本的名稱與顏色）\n' +
+                 '· 每日備註、待加入列表會保留\n' +
+                 '· 此操作無法復原，建議先備份')) return;
+    if (!confirm('再次確認：真的要清除全部 ' + count + ' 個模板嗎？')) return;
+
+    AppData.symbols = {};
+    AppData.templateOrder = [];
+    selectedSymbolForAdd = null;
+    selectedSymbolForDelete = null;
+    saveData();
+
+    // 重新渲染所有相關畫面
+    renderTemplateList();
+    renderQuickSymbols();
+    if (editMode === 'add' || editMode === 'delete') renderEditSymbolChips();
+    renderCalendar();
+    if (selectedDate) renderDayPanel();
+    renderQuickTable();
+
+    alert('✅ 已清除 ' + count + ' 個模板');
+});
+
+
     document.getElementById('chooseIcsBtn').addEventListener('click', chooseIcsFile);
     document.getElementById('icsRestoreInput').addEventListener('change', handleIcsFileSelect);
     document.getElementById('icsRestoreBtn').addEventListener('click', restoreFromIcs);
@@ -3152,6 +3292,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 symbol: item.symbol || '',
                 subject: item.subject,
                 date: item.date,
+                endDate: item.date,
                 startTime: item.startTime || '',
                 endTime: item.endTime || '',
                 allDay: !!item.allDay,
