@@ -81,7 +81,8 @@
     }
     .drawer-nav a:hover { background: #f1f3f4; }
     .drawer-nav a.active {
-        background: #e8f0fe; color: var(--primary);
+        background: var(--primary-bg);
+        color: var(--primary);
         border-left-color: var(--primary); font-weight: 600;
     }
 
@@ -119,7 +120,7 @@
     }
     .close-btn:hover { background: #f1f3f4; }
     .day-panel-body {
-        padding: 16px; overflow-y: auto; flex: 1;
+        padding: 0 16px 16px; overflow-y: auto; flex: 1;
         -webkit-overflow-scrolling: touch;
     }
 
@@ -297,7 +298,7 @@
     .tpl-color-grid .color-custom:hover {
         border-color: var(--primary) !important;
         color: var(--primary);
-        background: #e8f0fe !important;
+        background: var(--primary-bg) !important;
         transform: scale(1.08);
     }
     .tpl-color-grid .color-custom.selected {
@@ -358,7 +359,7 @@
     .form-group:last-child { margin-bottom: 0; }
 
     .btn {
-        padding: 9px 18px; border: none; border-radius: 4px;
+        padding: 9px 18px; border: none; border-radius: 50px;
         font-size: 14px; font-weight: 500; font-family: inherit;
         cursor: pointer; transition: background-color .2s;
         min-height: 40px;
@@ -388,10 +389,11 @@
         line-height: 1.4; box-sizing: border-box;
     }
     /* 日詳情面板的備註框：依內容自動增高，禁止手動拖拉 */
-    #dayNoteInput {
+    #dayNoteInput,
+    .sch-note {
         resize: none;
         overflow: hidden;
-        min-height: 60px;
+        min-height: 34px; /* .sch-note 原本的 min-height 是 34px */
         transition: height .1s ease;
     }
     .desc-input:focus { border-color: var(--primary); outline: none; background: #fff; }
@@ -522,7 +524,7 @@
     }
     .fab-option.active .fab-option-icon { background: rgba(255,255,255,.25); }
     .edit-symbol-bar {
-        background: #e8f0fe; border: 1px solid #aecbfa;
+        background: var(--primary-bg); border: 1px solid var(--primary-bg);
         border-radius: 8px; padding: 10px 14px;
         margin-bottom: 12px; display: flex;
         align-items: center; gap: 10px; flex-wrap: wrap;
@@ -571,6 +573,69 @@
         margin-bottom: 12px; font-size: 13px; color: #8a5a00;
         flex-shrink: 0;
     }
+
+    /* ========== 編輯模式切換按鈕 (Segmented Control) ========== */
+.edit-mode-switch-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px 0;
+    flex-shrink: 0;
+}
+
+.mode-toggle {
+    display: flex;
+    background: #f1f3f4;
+    border-radius: 24px;
+    padding: 3px;
+    position: relative;
+    width: 220px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.mode-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 8px 0;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+    transition: color 0.3s;
+}
+
+.mode-btn.active {
+    color: #fff;
+}
+
+.mode-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    height: calc(100% - 6px);
+    background: #4facfe;
+    border-radius: 20px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+    z-index: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.mode-slider.delete-mode {
+    transform: translateX(100%);
+    background: #ff416c;
+}
+
+/* 讓右下角 FAB 在編輯模式下稍微改變顏色提示 */
+.fab-menu.editing .fab-main {
+    background: var(--text); /* 深灰色背景 */
+    color: #fff;             /* 白色筆 */
+    transform: scale(0.95);
+}
 
     /* ========== 視圖切換 ========== */
     .view { display: none; }
@@ -678,7 +743,7 @@
     .cal-cell.today .cal-date { background: var(--primary); color: #fff; border-radius: 50%; }
     .cal-cell.selected {
         box-shadow: inset 0 0 0 2px var(--primary);
-        background: #e8f0fe;
+        background: var(--primary-bg);
     }
     .cal-date {
         font-size: 14px; font-weight: 600; width: 24px; height: 24px;
@@ -697,7 +762,7 @@
         white-space: normal; word-break: break-word;
         line-height: 1.2;
         overflow: hidden;
-        background: var(--primary); color: #fff; text-align: center;
+        background: var(--primary); color: #fff; text-align: left;
         border: none;
     }
     .cal-chip-timed {
@@ -739,14 +804,16 @@
     }
 
     /* ========== 時間軸 ========== */
-    .day-note-box { margin-bottom: 16px; }
+    .day-note-box { margin-top: 16px; margin-bottom: 16px; }
     .day-note-box label { display: block; margin-bottom: 4px; }
     .timeline-wrap {
-        position: relative; max-height: 420px; overflow-y: auto;
-        border: 1px solid var(--border); border-radius: 6px;
-        background: #fafafa; margin-bottom: 16px;
-        -webkit-overflow-scrolling: touch;
-    }
+        position: relative;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fafafa;
+        margin: 8px 0 20px;
+        padding: 0 0 14px;
+    }    
     .tl-allday { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border); background: #fff; position: sticky; top: 0; z-index: 5; }
     .timeline { position: relative; margin-left: 52px; }
     .tl-hour { position: absolute; left: 0; right: 0; border-top: 1px dashed #e0e0e0; height: 0; }
@@ -863,7 +930,7 @@
     .sch-table tr:nth-child(even) { background: #fafafa; }
     .row-duplicate { background: #fce8e6 !important; border-left: 5px solid var(--danger) !important; }
     .row-target-highlight { border-left: 6px solid var(--primary) !important; box-shadow: inset 0 0 0 1px var(--primary); }
-    tr.row-target-highlight:not(.row-duplicate) { background: #e8f0fe !important; }
+    tr.row-target-highlight:not(.row-duplicate) { background: var(--primary-bg) !important; }
     .badge-allday { background: #e6f4ea; color: #137333; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
     .badge-timed { background: #fef7e0; color: #b06000; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; }
     .table-input { width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; box-sizing: border-box; }
@@ -942,7 +1009,7 @@
         .cal-more { font-size: 10px; }
         .cal-day-note { font-size: 10px; white-space: pre-line; word-break: break-all;padding-left: 6px; }
 
-        .timeline-wrap { max-height: 360px; }
+        .timeline-wrap { margin: 6px 0 16px; padding: 0 0 12px; }
         .timeline { margin-left: 40px; }
         .tl-hour span { left: -38px; top: -7px; width: 34px; font-size: 9px; }
         .tl-event { padding: 2px 4px; font-size: 10px; border-left-width: 3px; }
@@ -978,7 +1045,8 @@
             min-height: calc(52px + var(--safe-top));
         }
         .day-panel-header h2, .tpl-editor-header h2, .custom-editor-header h2 { font-size: 15px; }
-        .day-panel-body { padding: 12px; }
+        .day-panel-body { padding: 0 12px 12px; }
+        .day-note-box { margin-top: 12px; }
         .tpl-editor-body, .custom-editor-body { padding: 16px 14px; }
         .tpl-editor-footer, .custom-editor-footer {
             padding: 10px 14px calc(10px + var(--safe-bottom));
@@ -1048,4 +1116,589 @@
     transform: scale(1.15);
     z-index: 10;
     border-radius: 50%;
+}
+
+    /* ==========================================
+    時間衝突錯誤提示
+    ========================================== */
+    .input-error {
+        border-color: var(--danger) !important;
+        background: #fce8e6 !important;
+        box-shadow: 0 0 0 1px var(--danger);
+    }
+    .time-error {
+        color: var(--danger);
+        font-size: 13px;
+        font-weight: 600;
+        margin: -6px 0 14px;
+        padding: 8px 10px;
+        background: #fce8e6;
+        border: 1px solid #f5c6cb;
+        border-radius: 6px;
+        line-height: 1.4;
+    }
+    .btn:disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
+
+    /* ==========================================
+   偏好設定：隱藏日曆備註
+   ========================================== */
+body.hide-calendar-notes .cal-day-note {
+    display: none !important;
+}
+
+/* ==========================================
+   日曆頂部與編輯模式按鈕統一改造
+   ========================================== */
+.cal-header button.btn,
+#finishEditBtn {
+    background: #f1f3f4; /* 統一淺灰背景 */
+    border: none !important; /* 強制移除邊框 */
+    border-radius: 20px; /* 膠囊圓角 */
+    font-size: 14px !important; /* 統一字體大小（以原本的 14px 為準） */
+    font-weight: 500;
+    color: var(--text);
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+    transition: background 0.2s;
+    padding: 0 16px;
+}
+
+.cal-header button.btn:active,
+#finishEditBtn:active {
+    background: #e8eaed; /* 按下去的反饋顏色 */
+}
+
+/* 左右箭頭：做成正圓形 */
+#prevMonth, #nextMonth {
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    font-size: 22px !important; /* 箭頭維持大一點的字體 */
+    line-height: 1;
+}
+
+/* 今天按鈕與完成按鈕：固定寬度與字體 */
+#todayBtn,
+#finishEditBtn {
+    width: 60px;
+    padding: 0 !important;
+}
+
+/* ===== 手機端（<= 768px）的按鈕微調 ===== */
+@media (max-width: 768px) {
+    .cal-header button.btn,
+    #finishEditBtn {
+        min-height: 32px;
+        border-radius: 16px;
+        font-size: 13px !important; /* 手機端字體微調 */
+    }
+    #prevMonth, #nextMonth {
+        width: 32px;
+        height: 32px;
+        font-size: 20px !important;
+    }
+    #todayBtn,
+    #finishEditBtn {
+        width: 52px;
+    }
+}
+
+/* ==========================================
+   偏好設定：開關滑動按鈕 (Toggle Switch)
+   ========================================== */
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.settings-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+/* 隱藏原本的 checkbox */
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* 滑軌背景 */
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #dadce0;
+    transition: .3s;
+    border-radius: 28px;
+}
+
+/* 圓形滑塊 */
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* 打勾（開啟）時的狀態 */
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--primary);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(22px);
+}
+
+/* ==========================================
+   日曆外觀：獨立小圓角格子
+   ========================================== */
+/* 1. 把網格的背景變成透明，並加上間距 */
+.cal-grid {
+    background: transparent !important;
+    gap: 2px !important; /* 👈 格子之間的縫隙 */
+    border-top: none !important;
+    padding: 3px 2px 2px;
+}
+
+/* 2. 把每個格子變成圓角卡片 */
+.cal-cell {
+    border-radius: 5px !important; /* 👈 格子圓角 */
+    background: #fff !important;
+    border: transparent !important; /* 加上淡淡的邊框 */
+    transition: transform 0.1s, background 0.15s;
+}
+.cal-cell:active {
+    transform: scale(0.96); /* 點擊時稍微縮小 */
+}
+
+/* 深色模式適配 */
+body.dark-mode .cal-cell {
+    background: var(--card-bg) !important;
+}
+body.dark-mode .cal-cell:hover {
+    background: #2d2d2d !important;
+}
+
+/* 今天與選中狀態的優化 */
+.cal-cell.today .cal-date {
+    border-radius: 50%;
+}
+.cal-cell.selected {
+    box-shadow: inset 0 0 0 2px var(--primary) !important;
+    background: var(--primary-bg) !important;
+}
+
+/* 其他月份的格子淡化處理 */
+.cal-cell.other-month {
+    opacity: 0.4;
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+/* ==========================================
+   日曆外觀：淺色/深色背景精準控制
+   ========================================== */
+
+/* 1. 淺色模式：只給「日期格子區域」加上灰底，不影響頂部標題 */
+.cal-grid-wrap {
+    background: #F2F3F4 !important; 
+}
+
+/* 2. 淺色模式：當月格子保持白色 */
+.cal-cell {
+    background: #ffffff !important;
+    border: transparent !important; 
+    border-radius: 5px !important; 
+}
+
+/* 3. 淺色模式：非當月格子透明（融入背景） */
+.cal-cell.other-month {
+    background: transparent !important; 
+    border-color: transparent !important; 
+    opacity: 1 !important;
+}
+.cal-cell.other-month .cal-date {
+    color: #b0b0b0 !important;
+}
+
+/* 4. 深色模式：強制維持深色背景與深色格子 */
+body.dark-mode .cal-grid-wrap {
+    background: var(--bg) !important; /* 使用深色模式的背景色 (#121212) */
+}
+body.dark-mode .cal-cell {
+    background: var(--card-bg) !important; /* 使用深色模式的卡片色 (#1e1e1e) */
+    border-color: var(--border) !important;
+}
+body.dark-mode .cal-cell.other-month {
+    background: transparent !important; 
+    border-color: transparent !important; 
+}
+
+/* 確保頂部 Header 的背景永遠是乾淨的 */
+#view-calendar.active .card {
+    background: transparent !important;
+}
+
+/* ==========================================
+   黑暗模式 (Dark Mode) 覆蓋樣式
+   ========================================== */
+body.dark-mode {
+    --bg: #121212;
+    --card-bg: #1e1e1e;
+    --text: #e8eaed;
+    --text-muted: #9aa0a6;
+    --border: #3c4043;
+    background: var(--bg) !important;
+    color: var(--text);
+}
+
+/* 覆蓋所有原本寫死白色的地方 */
+body.dark-mode .app-header,
+body.dark-mode .drawer,
+body.dark-mode .day-panel,
+body.dark-mode .tpl-editor,
+body.dark-mode .custom-editor,
+body.dark-mode .ym-picker,
+body.dark-mode .cal-cell,
+body.dark-mode .cal-grid {
+    background: var(--bg);
+    color: var(--text);
+}
+
+body.dark-mode .card,
+body.dark-mode .tl-allday,
+body.dark-mode .sch-card,
+body.dark-mode .tpl-item,
+body.dark-mode .fab-main,
+body.dark-mode .quick-symbol-btn,
+body.dark-mode .color-panel {
+    background: var(--card-bg);
+    border-color: var(--border);
+}
+
+/* 輸入框與按鈕 */
+body.dark-mode input,
+body.dark-mode textarea,
+body.dark-mode select,
+body.dark-mode .btn-secondary,
+body.dark-mode .table-input,
+body.dark-mode .quick-symbol-section,
+body.dark-mode .edit-mode-switch-wrapper .mode-toggle {
+    background: #2d2d2d;
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark-mode .btn-secondary:hover {
+    background: #3c4043;
+}
+
+body.dark-mode .cal-header button.btn,
+body.dark-mode #finishEditBtn {
+    background: #2d2d2d;
+    color: var(--text);
+}
+
+/* 編輯模式的模板列 */
+body.dark-mode .edit-symbol-bar {
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
+}
+body.dark-mode .symbol-chip {
+    background: #2d2d2d;
+}
+
+/* 文字與日曆 */
+body.dark-mode .cal-date,
+body.dark-mode .cal-chip-timed,
+body.dark-mode .sch-subject,
+body.dark-mode .sch-time,
+body.dark-mode .cal-day-note {
+    color: var(--text);
+}
+body.dark-mode .cal-cell:hover,
+body.dark-mode .sch-card:hover,
+body.dark-mode .tpl-item:hover {
+    background: #2d2d2d;
+}
+
+/* 日面板備註與時間軸 */
+body.dark-mode .day-note-box textarea,
+body.dark-mode .sch-note {
+    background: #2d2d2d;
+    color: var(--text);
+}
+body.dark-mode .timeline-wrap {
+    background: var(--bg);
+    border-color: var(--border);
+}
+body.dark-mode .tl-hour {
+    border-color: #3c4043;
+}
+body.dark-mode .tl-hour span {
+    color: #9aa0a6;
+}
+body.dark-mode .tl-event {
+    background: rgba(255,255,255,0.05) !important;
+}
+body.dark-mode .tl-event-note,
+body.dark-mode .tl-event span {
+    color: #9aa0a6 !important;
+}
+
+/* FAB 按鈕 */
+body.dark-mode .fab-menu.editing .fab-main {
+    background: var(--text);
+    color: var(--bg);
+}
+
+/* 其他細節修正 */
+body.dark-mode:has(#view-calendar.active) {
+    background: var(--bg) !important;
+}
+body.dark-mode #view-calendar.active .card {
+    background: transparent;
+}
+body.dark-mode .settings-row {
+    border-color: var(--border);
+}
+
+/* 自訂日程編輯器底部 */
+body.dark-mode .custom-editor-footer,
+/* 模板編輯器底部 */
+body.dark-mode .tpl-editor-footer {
+    background: var(--bg) !important; /* 改成深色背景 */
+    border-top-color: var(--border) !important; /* 確保頂部邊線是深色的 */
+}
+
+/* 順便修正底部按鈕在深色模式下的顏色，避免對比度太低 */
+body.dark-mode .custom-editor-footer .btn-secondary,
+body.dark-mode .tpl-editor-footer .btn-secondary {
+    background: #2d2d2d !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+}
+
+body.dark-mode .custom-editor-footer .btn-secondary:hover,
+body.dark-mode .tpl-editor-footer .btn-secondary:hover {
+    background: #3c4043 !important;
+}
+
+/* 如果你想讓非當月日期的文字再淡一點，可以加上這行 */
+body:not(.dark-mode) .cal-cell.other-month .cal-date {
+    color: #9aa0a6; 
+}
+
+/* 1. 修正卡片標題（如「介面外觀設定」、「重置設定」） */
+body.dark-mode .card-title {
+    color: var(--text); /* 文字變亮色 */
+    border-bottom-color: var(--border) !important; /* 底線變深色 */
+}
+
+/* 2. 修正所有表單標籤、設定標題 */
+body.dark-mode label,
+body.dark-mode .settings-label {
+    color: var(--text) !important;
+}
+
+/* 3. 修正設定頁面的分割線 */
+body.dark-mode .settings-row,
+body.dark-mode .form-group[style*="border-top"] {
+    border-top-color: var(--border) !important;
+}
+
+/* 4. 修正「恢復預設介面設定」按鈕 */
+body.dark-mode #resetSettingsBtn {
+    background: #2d2d2d;
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+body.dark-mode #resetSettingsBtn:hover {
+    background: #3c4043;
+}
+
+/* 5. 把提示文字（hint）的顏色稍微調亮一點，避免看不清 */
+body.dark-mode .hint {
+    color: #9aa0a6 !important;
+}
+
+/* 1. 修正自訂模板列表 */
+body.dark-mode .tpl-item-name {
+    color: var(--text) !important; /* 模板名稱變亮 */
+}
+body.dark-mode .tpl-item-meta {
+    color: var(--text-muted) !important; /* 模板時間變灰亮色 */
+}
+body.dark-mode .tpl-item:hover {
+    background: #2d2d2d !important;
+}
+
+/* 2. 修正快捷排班的表格 */
+/* 表格外框與背景 */
+body.dark-mode .sch-table {
+    background: var(--card-bg);
+}
+/* 表頭 (顏色、簡稱、名稱...) */
+body.dark-mode .sch-table th {
+    background: #2d2d2d !important;
+    color: var(--text-muted) !important;
+    border-color: var(--border) !important;
+}
+/* 表格內容列與文字 */
+body.dark-mode .sch-table tr {
+    background: var(--card-bg) !important; /* 預設列背景 */
+    color: var(--text) !important;
+}
+body.dark-mode .sch-table tr:nth-child(even) {
+    background: #252525 !important; /* 偶數列稍微深一點點，區分開來 */
+}
+body.dark-mode .sch-table td {
+    border-color: var(--border) !important;
+}
+body.dark-mode .sch-table td strong {
+    color: var(--text) !important;
+}
+
+/* 表格內的日期輸入框 */
+body.dark-mode .table-input {
+    background: #1e1e1e !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+}
+
+/* 3. 修正其他可能漏掉的文字 */
+body.dark-mode .card-title span {
+    color: var(--text) !important;
+}
+body.dark-mode #rowCount {
+    color: var(--text-muted) !important;
+}
+
+/* 1. 側邊選單項目 */
+body.dark-mode .drawer-nav a:hover {
+    background: #2d2d2d !important;
+}
+
+/* 2. 左上角選單按鈕、彈出面板的關閉按鈕 */
+body.dark-mode .menu-btn:hover,
+body.dark-mode .close-btn:hover {
+    background: #2d2d2d !important;
+}
+
+/* 3. 各種小圖標按鈕（如刪除 ✕、模板編輯 ✏️） */
+body.dark-mode .btn-icon:hover,
+body.dark-mode .tpl-item-edit:hover {
+    background: #3c4043 !important;
+}
+
+/* 4. 日曆月標題 */
+body.dark-mode .cal-header h2:hover {
+    background: #2d2d2d !important;
+}
+
+/* 5. 快速排班按鈕 */
+body.dark-mode .quick-symbol-btn:hover {
+    background: #3c4043 !important;
+    /* 保留原本的邊框顏色，避免被覆蓋 */
+}
+
+body.dark-mode .ym-month-btn {
+    background: #2d2d2d !important; /* 未選中的月份改為深灰底 */
+    border-color: var(--border) !important; /* 深色邊框 */
+    color: var(--text) !important; /* 亮色文字 */
+}
+
+body.dark-mode .ym-month-btn:hover {
+    background: #3c4043 !important; /* 滑鼠移過去稍微變亮 */
+}
+
+/* 確保「已選中」的月份依然維持你的主題色，不會被上面的設定覆蓋 */
+body.dark-mode .ym-month-btn.current {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: #fff !important;
+}
+
+body.dark-mode .ym-month-btn.current:hover {
+    background: var(--primary-hover) !important;
+}
+
+/* ==========================================
+   側邊欄底部版本號
+   ========================================== */
+.drawer-version {
+    margin-top: auto; /* 👈 這個魔法屬性會把它推到最底部 */
+    padding: 20px 20px calc(20px + var(--safe-bottom));
+    font-size: 12px;
+    color: #9aa0a6;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* 深色模式適配 */
+body.dark-mode .drawer-version {
+    color: #9aa0a6;
+}
+
+/* ==========================================
+   日曆格子內的日程備註樣式
+   ========================================== */
+.cal-event-note {
+    font-size: 10px;
+    font-weight: normal;
+    color: #5f6368;
+    margin-top: 1px;
+    white-space: pre-wrap; /* 👈 保留換行符，且允許自動換行 */
+    word-break: break-all; /* 避免長英文單字撐破格子 */
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 20; /* 👈 限制最多顯示 20 行，超過的自動省略 */
+    overflow: hidden;
+}
+
+/* 讓全日活動（有背景色的）的備註文字也能看清楚 */
+.cal-chip-allday .cal-event-note {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* 深色模式適配 */
+body.dark-mode .cal-event-note {
+    color: #9aa0a6;
+}
+body.dark-mode .cal-chip-allday .cal-event-note {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* 隱藏開關 */
+body.hide-event-notes .cal-event-note {
+    display: none !important;
 }

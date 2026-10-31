@@ -15,21 +15,7 @@
 
 <!-- ========== 編輯模式 FAB ========== -->
 <div class="fab-menu" id="fabMenu">
-    <div class="fab-options" id="fabOptions">
-        <button class="fab-option" data-mode="add">
-            <span class="fab-option-label">快速新增</span>
-            <span class="fab-option-icon">➕</span>
-        </button>
-        <button class="fab-option" data-mode="delete">
-            <span class="fab-option-label">快速刪除</span>
-            <span class="fab-option-icon">➖</span>
-        </button>
-        <button class="fab-option" data-mode="normal">
-            <span class="fab-option-label">瀏覽</span>
-            <span class="fab-option-icon">👁</span>
-        </button>
-    </div>
-    <button class="fab-main" id="fabMain" aria-label="编辑模式">
+    <button class="fab-main" id="fabMain" aria-label="編輯模式">
         <span class="fab-icon" id="fabIcon">✏️</span>
     </button>
 </div>
@@ -46,7 +32,9 @@
         <a href="#template" data-view="template">🧩 自訂模板</a>
         <a href="#quick"    data-view="quick">⚡ 快捷排班</a>
         <a href="#backup"   data-view="backup">📦 備份</a>
+        <a href="#settings" data-view="settings">⚙️ 偏好設定</a>
     </nav>
+    <div class="drawer-version">Shifree v1.2.1</div>
 </aside>
 <div class="overlay" id="drawerOverlay"></div>
 
@@ -54,6 +42,15 @@
 
     <!-- ===== 日曆 ===== -->
     <section id="view-calendar" class="view active">
+
+        <div class="edit-mode-switch-wrapper" id="editModeSwitchWrapper" style="display:none;">
+            <div class="mode-toggle" id="modeToggle">
+                <div class="mode-slider" id="modeSlider"></div>
+                <button class="mode-btn active" data-mode="add" id="modeBtnAdd">快速新增</button>
+                <button class="mode-btn" data-mode="delete" id="modeBtnDelete">快速刪除</button>
+            </div>
+            <button class="btn" id="finishEditBtn">完成</button>
+        </div>
 
         <div class="edit-symbol-bar" id="editSymbolBar" style="display:none;">
             <span class="edit-symbol-label" id="editSymbolBarLabel">選擇模板：</span>
@@ -186,7 +183,7 @@
                 </div>
             </div>
             <div class="btn-group" style="margin-top:12px;">
-                <button class="btn btn-success" id="csvRangeBtn">📤 匯出选定范围 CSV</button>
+                <button class="btn btn-success" id="csvRangeBtn">📤 匯出選定範圍 CSV</button>
                 <button class="btn btn-secondary" id="csvAllBtn">📤 匯出全部 CSV</button>
             </div>
         </div>
@@ -208,7 +205,7 @@
                 </div>
             </div>
             <div class="btn-group" style="margin-top:12px;">
-                <button class="btn btn-success" id="icsRangeBtn">📤 匯出选定范围 ICS</button>
+                <button class="btn btn-success" id="icsRangeBtn">📤 匯出選定範圍 ICS</button>
                 <button class="btn btn-secondary" id="icsAllBtn">📤 匯出全部 ICS</button>
             </div>
         </div>
@@ -267,6 +264,85 @@
         <button class="btn btn-danger" id="wipeSchedulesBtn">🗑 清除所有已加入日程</button>
     </div>
 </div>
+    </section>
+
+    <!-- ===== 偏好設定 ===== -->
+    <section id="view-settings" class="view">
+        <div class="card">
+            <div class="card-title">⚙️ 介面外觀設定</div>
+            
+            <div class="form-group" style="margin-bottom: 24px;">
+                <label>主題顏色（頂欄、按鈕、選中狀態等）</label>
+                <div class="tpl-color-grid" id="settingsThemeColorGrid" style="margin-top: 8px;"></div>
+            </div>
+
+            <div class="form-group" style="border-top: 1px solid var(--border); padding-top: 16px;">
+                <div class="settings-row">
+                    <div>
+                        <span class="settings-label">黑暗模式</span>
+                        <p class="hint" style="margin-top: 4px;">
+                            開啟後，整個 App 將切換為深色介面，適合在夜間使用。
+                        </p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingsDarkMode">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>            
+
+            <div class="form-group" style="border-top: 1px solid var(--border); padding-top: 16px;">
+                <div class="settings-row">
+                    <div>
+                        <span class="settings-label">在日曆格子中顯示「本日備註」</span>
+                        <p class="hint" style="margin-top: 4px;">
+                            關閉後，日曆上將不再顯示備註文字，但仍會保留在點擊日期後的詳細面板中。
+                        </p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingsShowDayNote">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group" style="border-top: 1px solid var(--border); padding-top: 16px;">
+                <div class="settings-row">
+                    <div>
+                        <span class="settings-label">在日曆格子中顯示「日程備註」</span>
+                        <p class="hint" style="margin-top: 4px;">
+                            開啟後，行程卡片上的備註會以單行顯示在日曆中。
+                        </p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingsShowEventNote">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-group" style="border-top: 1px solid var(--border); padding-top: 16px;">
+                <div class="settings-row">
+                    <div>
+                        <span class="settings-label">將日程備註彙整到「本日備註」位置</span>
+                        <p class="hint" style="margin-top: 4px;">
+                            開啟後，當天所有行程的備註會集合顯示在日曆格子最下方。
+                        </p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingsShowEventNoteInDayArea">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">💾 重置設定</div>
+            <p class="hint" style="margin-top:-6px;">
+                將上述設定恢復為預設值，這不會影響你的排班資料。
+            </p>
+            <button class="btn btn-secondary" id="resetSettingsBtn">恢復預設介面設定</button>
+        </div>
     </section>
 
 </main>
@@ -382,6 +458,7 @@
             <label for="customEndInput">結束時間</label>
             <input type="time" id="customEndInput" value="18:00">
         </div>
+        <p class="time-error" id="customTimeError" style="display:none;"></p>
         <div class="form-group">
             <label for="customNoteInput">備註（選填）</label>
             <textarea id="customNoteInput" class="desc-input" placeholder="..."></textarea>

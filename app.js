@@ -115,6 +115,9 @@ function handleRemoveColor(color) {
         // 重繪模板 / 自訂日程色板
         if (typeof renderTplColorGrid === 'function') renderTplColorGrid();
         if (typeof renderCustomColorGrid === 'function') renderCustomColorGrid();
+        if (typeof renderSettingsView === 'function' && document.getElementById('view-settings').classList.contains('active')) {
+            renderSettingsView();
+        }
     }
 }
 
@@ -238,6 +241,9 @@ function applyPickedColor(color) {
     } else if (target.type === 'schedule') {
         applyScheduleColor(target.role, target.id, color);
     }
+    if (typeof renderSettingsView === 'function' && document.getElementById('view-settings').classList.contains('active')) {
+        renderSettingsView();
+    }
 }
 
 /* 套用顏色到行程/模板的色板 */
@@ -320,7 +326,14 @@ const STORAGE_KEY = 'ShiftAppData_v3';
 const AppData = {
     symbols: {}, schedules: [], dayNotes: {}, staging: [],
     templateOrder: [], customColors: [],
-    palette: DEFAULT_PALETTE.slice()
+    palette: DEFAULT_PALETTE.slice(),
+    settings: {
+        themeColor: '#1a73e8',
+        showDayNote: true,
+        darkMode: false,
+        showEventNote: true,
+        showEventNoteInDayArea: false
+    }
 };
 function loadData() {
     try {
@@ -335,6 +348,9 @@ function loadData() {
             if (Array.isArray(p.customColors)) AppData.customColors = p.customColors;
             // 舊版沒有 palette 欄位 → 保持預設色板
             if (Array.isArray(p.palette)) AppData.palette = p.palette;
+            if (p.settings) {
+                AppData.settings = Object.assign({ themeColor: '#1a73e8', showDayNote: true, showEventNote: true, showEventNoteInDayArea: false, darkMode: false }, p.settings);
+            }
         }
     } catch (e) { console.warn('讀取存檔失敗：', e); }
 }
@@ -562,21 +578,53 @@ function renderCalendar() {
         const daySchedules = getSchedulesByDate(cellDate);
         const dayNote = AppData.dayNotes[cellDate] || '';
 
+        // 1. 先處理行程標籤 (chipsHtml)
         let chipsHtml = '';
         daySchedules.forEach(function (s) {
             const color = s.color || DEFAULT_COLOR;
+            let eventNoteHtml = ''; // 這是行程本身的備註(單行)
+            if (s.note && !AppData.settings.showEventNoteInDayArea) {
+                // 只有在「沒有」彙整到本日備註時，才顯示在行程標籤裡
+                const cleanNote = escapeHtml(s.note);
+                eventNoteHtml = '<div class="cal-event-note">📝 ' + cleanNote + '</div>';
+            }
+
             if (s.allDay) {
-                chipsHtml += '<div class="cal-chip-allday" style="background:' + color + ';">' + escapeHtml(s.subject) + '</div>';
+                chipsHtml += '<div class="cal-chip-allday" style="background:' + color + ';">' + escapeHtml(s.subject) + eventNoteHtml + '</div>';
             } else {
-                chipsHtml += '<div class="cal-chip-timed" style="border-left-color:' + color + ';">' + escapeHtml(s.subject) + '</div>';
+                chipsHtml += '<div class="cal-chip-timed" style="border-left-color:' + color + ';">' + escapeHtml(s.subject) + eventNoteHtml + '</div>';
             }
         });
 
+        // 2. 處理格子下方的「本日備註」與「彙整日程備註」
         let noteHtml = '';
-        if (dayNote) {
-            noteHtml = '<div class="cal-day-note">📝 ' + escapeHtml(dayNote) + '</div>';
+        let dayNoteText = AppData.dayNotes[cellDate] || '';
+        let eventNotesText = '';
+
+        if (AppData.settings.showEventNoteInDayArea) {
+            const notesList = [];
+            daySchedules.forEach(function(s) {
+                if (s.note) {
+                    const cleanNote = s.note;
+                    notesList.push(s.subject + ': ' + cleanNote);
+                }
+            });
+            if (notesList.length > 0) {
+                eventNotesText = notesList.join('\n'); 
+            }
         }
 
+        let finalNote = dayNoteText;
+        if (eventNotesText) {
+            if (finalNote) finalNote += '\n'; 
+            finalNote += eventNotesText;
+        }
+
+        if (finalNote) {
+            noteHtml = '<div class="cal-day-note">📝 ' + escapeHtml(finalNote) + '</div>';
+        }
+
+        // 3. 渲染格子
         cell.innerHTML =
             '<div class="cal-date">' + Number(cellDate.slice(8, 10)) + '</div>' +
             '<div class="cal-events">' + chipsHtml + '</div>' +
@@ -741,7 +789,9 @@ function buildTimelineHtml(list) {
     if (allDay.length) {
         allDayHtml = '<div class="tl-allday">' + allDay.map(function (s) {
             const color = s.color || DEFAULT_COLOR;
-            return '<span class="cal-chip-allday" style="background:' + color + ';">' + escapeHtml(s.subject) + '</span>';
+            return '<span class="cal-chip-allday" data-schedule-id="' + escapeHtml(s.id) + '" ' +
+                   'style="background:' + color + '; cursor: pointer;">' +
+                   escapeHtml(s.subject) + '</span>';
         }).join('') + '</div>';
     }
 
@@ -801,22 +851,43 @@ function renderDayPanel() {
 
     const noteInput = document.getElementById('dayNoteInput');
     if (noteInput) {
-        // 自動依內容行數調整高度
-        const autoResize = function () {
-            noteInput.style.height = 'auto';
-            noteInput.style.height = Math.max(60, noteInput.scrollHeight) + 'px';
-        };
         // 一開啟面板就先調整一次（載入既有備註）
-        autoResize();
+        autoResizeTextarea(noteInput);
         noteInput.addEventListener('input', function () {
             AppData.dayNotes[selectedDate] = noteInput.value;
             saveData();
-            updateCalendarDayNote(selectedDate);
-            autoResize();   // 每次輸入都重新計算
+            clearTimeout(window._dayNoteTimer);
+            window._dayNoteTimer = setTimeout(function() {
+                renderCalendar(); 
+            }, 500);
+            autoResizeTextarea(noteInput);   // 每次輸入都重新計算
         });
     }
+
+    // ===== 處理日程卡片的備註自動延展與儲存 =====
+    body.querySelectorAll('.sch-note').forEach(function(ta) {
+        autoResizeTextarea(ta);
+        
+        ta.addEventListener('input', function () {
+            const item = AppData.schedules.find(function (x) { return x.id === ta.dataset.note; });
+            if (item) {
+                item.note = ta.value;
+                saveData();
+                updateTimelineNote(item.id, ta.value);
+            }
+            autoResizeTextarea(ta);
+        });
+    });    
+
     // 點時間軸事件 → 打開編輯
     body.querySelectorAll('.tl-event[data-schedule-id]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openCustomEditor({ scheduleId: el.dataset.scheduleId });
+        });
+    });
+    // 點全日活動 chip → 打開編輯
+    body.querySelectorAll('.tl-allday [data-schedule-id]').forEach(function (el) {
         el.addEventListener('click', function (e) {
             e.stopPropagation();
             openCustomEditor({ scheduleId: el.dataset.scheduleId });
@@ -832,12 +903,7 @@ function renderDayPanel() {
             renderDayPanel();
         });
     });
-    body.querySelectorAll('[data-note]').forEach(function (ta) {
-        ta.addEventListener('input', function () {
-            const item = AppData.schedules.find(function (x) { return x.id === ta.dataset.note; });
-            if (item) { item.note = ta.value; saveData(); updateTimelineNote(item.id, ta.value); }
-        });
-    });
+
     // 點排班卡片（除了備註框、刪除按鈕、顏色圓點）→ 打開編輯
     body.querySelectorAll('.sch-card[data-schedule-id]').forEach(function (card) {
         card.addEventListener('click', function (e) {
@@ -851,11 +917,6 @@ function renderDayPanel() {
             openCustomEditor({ scheduleId: card.dataset.scheduleId });
         });
     });
-    const wrap = body.querySelector('.timeline-wrap');
-    if (wrap && list.length) {
-        const firstTimed = list.filter(function (s) { return !s.allDay; })[0];
-        if (firstTimed) wrap.scrollTop = Math.max(0, timeToMinutes(firstTimed.startTime) / 60 * 48 - 60);
-    }
 }
 
 function updateCalendarDayNote(dateStr) {
@@ -875,9 +936,17 @@ function updateCalendarDayNote(dateStr) {
     } else if (noteEl) { noteEl.remove(); }
 }
 
+/* 讓 textarea 高度自動符合內容 */
+function autoResizeTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+
 function updateTimelineNote(scheduleId, note) {
     clearTimeout(window._timelineNoteTimer);
     window._timelineNoteTimer = setTimeout(function () {
+        renderCalendar(); 
         const activeEl = document.activeElement;
         const isNoteTextarea = activeEl && activeEl.dataset && activeEl.dataset.note === scheduleId;
         const selStart = isNoteTextarea ? activeEl.selectionStart : 0;
@@ -908,52 +977,49 @@ function applySymbolToDate(symbol, date) {
 function setEditMode(mode) {
     editMode = mode;
 
-    // --- 更新 FAB 主按鈕與選項狀態 ---
+    // --- 更新切換 UI 狀態 ---
+    const switchWrapper = document.getElementById('editModeSwitchWrapper');
+    const slider = document.getElementById('modeSlider');
+    const btnAdd = document.getElementById('modeBtnAdd');
+    const btnDelete = document.getElementById('modeBtnDelete');
     const fabMenu = document.getElementById('fabMenu');
-    const fabIcon = document.getElementById('fabIcon');
-    if (fabMenu && fabIcon) {
-        fabMenu.classList.remove('mode-add', 'mode-delete', 'mode-normal');
-        fabMenu.classList.add('mode-' + mode);
-        if (mode === 'add') fabIcon.textContent = '➕';
-        else if (mode === 'delete') fabIcon.textContent = '➖';
-        else fabIcon.textContent = '✏️';
-    }
-    document.querySelectorAll('.fab-option').forEach(function (b) {
-        b.classList.toggle('active', b.dataset.mode === mode);
-    });
 
-    // --- 顯示 / 隱藏模式相關 UI ---
-    const symbolBar = document.getElementById('editSymbolBar');
-    const symbolBarLabel = document.getElementById('editSymbolBarLabel');
-    const hintBar = document.getElementById('editHint');
-    const grid = document.getElementById('calGrid');
-
-    if (mode === 'add') {
-        selectedSymbolForDelete = null;
-        symbolBar.style.display = 'flex';
-        symbolBarLabel.textContent = '選擇模板：';
-        hintBar.style.display = 'block';
-        hintBar.textContent = '💡 點上方模板選中後，在日期上「單擊」加入一天，「按住拖拽」加入連續多天。';
-        if (grid) grid.style.touchAction = 'none';
-        renderEditSymbolChips();
-    } else if (mode === 'delete') {
-        selectedSymbolForAdd = null;
-        symbolBar.style.display = 'flex';
-        symbolBarLabel.textContent = '選擇要刪除的模板（不選=刪除全部）';
-        hintBar.style.display = 'block';
-        hintBar.textContent = '💡 選擇模板 → 只刪除該模板；未選擇 → 刪除當天全部日程，刪除前會先彈出確認。';
-        if (grid) grid.style.touchAction = 'none';
-        renderEditSymbolChips();
+    if (mode === 'normal') {
+        if(switchWrapper) switchWrapper.style.display = 'none';
+        document.getElementById('editSymbolBar').style.display = 'none';
+        document.getElementById('editHint').style.display = 'none';
+        document.getElementById('calGrid').style.touchAction = 'auto';
+        if(fabMenu) fabMenu.classList.remove('editing');
     } else {
-        symbolBar.style.display = 'none';
-        hintBar.style.display = 'none';
-        if (grid) grid.style.touchAction = 'auto';
+        if(switchWrapper) switchWrapper.style.display = 'flex';
+        document.getElementById('editSymbolBar').style.display = 'flex';
+        document.getElementById('editHint').style.display = 'block';
+        document.getElementById('calGrid').style.touchAction = 'none';
+        if(fabMenu) fabMenu.classList.add('editing');
+
+        // 更新滑塊與文字狀態
+        if (mode === 'add') {
+            if(slider) slider.classList.remove('delete-mode');
+            if(btnAdd) btnAdd.classList.add('active');
+            if(btnDelete) btnDelete.classList.remove('active');
+            document.getElementById('editSymbolBarLabel').textContent = '選擇模板：';
+            document.getElementById('editHint').textContent = '💡 點上方模板選中後，在日期上「單擊」加入一天，「按住拖拽」加入連續多天。';
+        } else if (mode === 'delete') {
+            if(slider) slider.classList.add('delete-mode');
+            if(btnDelete) btnDelete.classList.add('active');
+            if(btnAdd) btnAdd.classList.remove('active');
+            document.getElementById('editSymbolBarLabel').textContent = '選擇要刪除的模板（不選=刪除全部）';
+            document.getElementById('editHint').textContent = '💡 選擇模板 → 只刪除該模板；未選擇 → 刪除當天全部日程，刪除前會先彈出確認。';
+        }
+        renderEditSymbolChips();
     }
+
     calDrag.active = false;
     clearDragPreview();
     renderCalendar();
     renderDayPanel();
 }
+
 function renderEditSymbolChips() {
     const wrap = document.getElementById('editSymbolChips');
     if (!wrap) return;
@@ -1146,6 +1212,7 @@ let selectedTplColor = DEFAULT_COLOR;
 let justDragged = false;
 let selectedCustomColor = DEFAULT_COLOR;
 let editingCustomId = null;   // 目前編輯中的日程 ID（null = 新增模式）
+let editingOriginalDuration = null;
 
 /* 取得模板的自訂排序（若無則初始化為目前 key 的順序） */
 function getOrderedCodes() {
@@ -1939,8 +2006,13 @@ if (prefill.scheduleId) {
     document.getElementById('customNoteInput').value = item.note || '';
     selectedCustomColor = item.color || DEFAULT_COLOR;
     deleteBtn.style.display = 'inline-block';
+    const sMin = timeToMinutes(item.startTime);
+    const eMin = timeToMinutes(item.endTime);
+    editingOriginalDuration = (!item.allDay && eMin > sMin) ? (eMin - sMin) : null;
+
 } else {
     editingCustomId = null;
+    editingOriginalDuration = null;
     document.getElementById('customEditorTitle').textContent = '新增日程';
     const baseDate = prefill.date || selectedDate || todayStr();
     document.getElementById('customDateInput').value = baseDate;
@@ -1956,6 +2028,7 @@ if (prefill.scheduleId) {
 
     renderCustomColorGrid();
     updateCustomTimeDisabled();
+    validateCustomTimes();
 
     document.getElementById('customEditor').classList.add('open');
     document.getElementById('customEditorOverlay').classList.add('show');
@@ -1966,6 +2039,7 @@ function closeCustomEditor() {
     document.getElementById('customEditor').classList.remove('open');
     document.getElementById('customEditorOverlay').classList.remove('show');
     editingCustomId = null;
+    editingOriginalDuration = null;
 }
 
 
@@ -1973,6 +2047,60 @@ function updateCustomTimeDisabled() {
     const allDay = document.getElementById('customAllDayInput').checked;
     document.getElementById('customStartInput').disabled = allDay;
     document.getElementById('customEndInput').disabled = allDay;
+    validateCustomTimes();
+}
+
+/* ============================================================
+   時間衝突檢查：結束時間必須晚於開始時間
+   ============================================================ */
+function validateCustomTimes() {
+    const startInput = document.getElementById('customStartInput');
+    const endInput   = document.getElementById('customEndInput');
+    const saveBtn    = document.getElementById('saveCustomBtn');
+    const errEl      = document.getElementById('customTimeError');
+    const allDay     = document.getElementById('customAllDayInput').checked;
+
+    // 先清掉舊狀態
+    startInput.classList.remove('input-error');
+    endInput.classList.remove('input-error');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    saveBtn.disabled = false;
+
+    if (allDay) return true;   // 整天活動不需要比時間
+
+    const s = startInput.value;
+    const e = endInput.value;
+    if (!s || !e) return true;
+
+    if (timeToMinutes(e) <= timeToMinutes(s)) {
+        startInput.classList.add('input-error');
+        endInput.classList.add('input-error');
+        if (errEl) {
+            errEl.textContent = '⚠️ 結束時間必須晚於開始時間，請修正後再儲存';
+            errEl.style.display = 'block';
+        }
+        saveBtn.disabled = true;
+        return false;
+    }
+    return true;
+}
+
+/* 修改開始時間 → 結束時間依原本活動時長自動平移 */
+function onCustomStartChanged() {
+    const allDay = document.getElementById('customAllDayInput').checked;
+
+    if (!allDay && editingOriginalDuration && editingOriginalDuration > 0) {
+        const startVal = document.getElementById('customStartInput').value;
+        if (startVal) {
+            let endMin = timeToMinutes(startVal) + editingOriginalDuration;
+            // 超過 23:59 就封頂，避免產生跨日時間
+            if (endMin > 1439) endMin = 1439;
+            const hh = String(Math.floor(endMin / 60)).padStart(2, '0');
+            const mm = String(endMin % 60).padStart(2, '0');
+            document.getElementById('customEndInput').value = hh + ':' + mm;
+        }
+    }
+    validateCustomTimes();
 }
 
 function saveCustomSchedule() {
@@ -1986,6 +2114,10 @@ function saveCustomSchedule() {
 
     if (!date) { alert('請選擇開始日期'); return; }
     if (!subject) { alert('请输入名稱'); return; }
+    if (!allDay && !validateCustomTimes()) {
+        alert('⚠️ 結束時間必須晚於開始時間，請修正後再儲存');
+        return;
+    }    
 
     // 若沒填結束日期，或結束日期早於開始日期 → 視為單日活動
     if (!endDate || endDate < date) endDate = date;
@@ -2935,10 +3067,103 @@ function openDayPanel() { document.getElementById('dayPanel').classList.add('ope
 function closeDayPanel() { document.getElementById('dayPanel').classList.remove('open'); document.getElementById('dayPanelOverlay').classList.remove('show'); }
 
 /* ============================================================
+   偏好設定邏輯
+   ============================================================ */
+function applySettings() {
+    // 1. 套用主題色
+    let themeColor = AppData.settings.themeColor || '#1a73e8';
+    document.documentElement.style.setProperty('--primary', themeColor);
+
+    document.documentElement.style.setProperty('--primary-bg', hexToRgba(themeColor, 0.1));
+    document.documentElement.style.setProperty('--primary-border', hexToRgba(themeColor, 0.3));
+
+    // 根據主題色計算 hover 顏色（簡單加深）
+    // 這裡用簡單的暗化處理，若不想寫太複雜可以直接固定
+    const r = parseInt(themeColor.slice(1, 3), 16);
+    const g = parseInt(themeColor.slice(3, 5), 16);
+    const b = parseInt(themeColor.slice(5, 7), 16);
+    const darkerHex = '#' + 
+        Math.max(0, r - 30).toString(16).padStart(2, '0') +
+        Math.max(0, g - 30).toString(16).padStart(2, '0') +
+        Math.max(0, b - 30).toString(16).padStart(2, '0');
+    document.documentElement.style.setProperty('--primary-hover', darkerHex);
+
+    // 2. 套用是否顯示日曆備註
+    if (AppData.settings.showDayNote) {
+        document.body.classList.remove('hide-calendar-notes');
+    } else {
+        document.body.classList.add('hide-calendar-notes');
+    }
+    if (AppData.settings.darkMode) {
+        document.body.classList.add('dark-mode');
+    } else {
+        document.body.classList.remove('dark-mode');
+    }
+
+    // 3. 套用是否顯示日程備註
+    if (AppData.settings.showEventNote) {
+        document.body.classList.remove('hide-event-notes');
+    } else {
+        document.body.classList.add('hide-event-notes');
+    }
+}
+
+function renderSettingsView() {
+    // 渲染主題色色板
+    const colorGrid = document.getElementById('settingsThemeColorGrid');
+    colorGrid.innerHTML = '';
+    
+    // 使用現有的 getAllColors() 取得所有可用顏色
+    const colors = getAllColors();
+    const currentColor = AppData.settings.themeColor || '#1a73e8';
+    
+    colors.forEach(c => {
+        const dot = document.createElement('span');
+        dot.className = 'color-option' + (c === currentColor ? ' selected' : '');
+        dot.style.background = c;
+        dot.dataset.color = c;
+        dot.title = '點擊設為主題色';
+        dot.addEventListener('click', function() {
+            AppData.settings.themeColor = c;
+            saveData();
+            applySettings();
+            renderSettingsView(); // 重新渲染以更新選中狀態
+        });
+        colorGrid.appendChild(dot);
+    });
+
+    // 加上系統自訂顏色按鈕
+    const custom = document.createElement('span');
+    custom.className = 'color-option color-custom';
+    custom.textContent = '🎨';
+    custom.title = '自訂主題顏色';
+    custom.addEventListener('click', function () {
+        // 借用全域取色器，但需要一個新的 type 來區分
+        openColorPicker({ type: 'theme' }, currentColor);
+    });
+    colorGrid.appendChild(custom);
+
+    // 設定 Checkbox
+    const cb = document.getElementById('settingsShowDayNote');
+    if (cb) cb.checked = AppData.settings.showDayNote;
+
+    const cbDark = document.getElementById('settingsDarkMode');
+    if (cbDark) cbDark.checked = !!AppData.settings.darkMode;
+
+    // 設定日程備註事件與重置
+    const cbEventNote = document.getElementById('settingsShowEventNote');
+    if (cbEventNote) cbEventNote.checked = !!AppData.settings.showEventNote;
+
+    const cbEventNoteArea = document.getElementById('settingsShowEventNoteInDayArea');
+    if (cbEventNoteArea) cbEventNoteArea.checked = !!AppData.settings.showEventNoteInDayArea;
+
+}
+
+/* ============================================================
    13. 啟動
    ============================================================ */
 function switchView(viewName) {
-    const validViews = ['calendar', 'template', 'quick', 'backup'];
+    const validViews = ['calendar', 'template', 'quick', 'backup', 'settings'];
     if (validViews.indexOf(viewName) === -1) viewName = 'calendar';
     document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
     const target = document.getElementById('view-' + viewName);
@@ -2973,6 +3198,7 @@ function switchView(viewName) {
         if (viewName === 'template') renderTemplateList();
         else if (viewName === 'quick') { renderQuickSymbols(); renderQuickTable(); }
         else if (viewName === 'backup') renderBackupView();
+        else if (viewName === 'settings') renderSettingsView();
     }
 }
 
@@ -3034,6 +3260,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     loadData();
     setupColorLongPress();
+    applySettings();
     document.getElementById('menuBtn').addEventListener('click', openDrawer);
     document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
     document.querySelectorAll('.drawer-nav a').forEach(function (a) {
@@ -3063,6 +3290,13 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('saveCustomBtn').addEventListener('click', saveCustomSchedule);
     document.getElementById('deleteCustomBtn').addEventListener('click', deleteCustomSchedule);
     document.getElementById('customAllDayInput').addEventListener('change', updateCustomTimeDisabled);
+    // 時間自動連動 + 衝突檢查
+    const customStartInput = document.getElementById('customStartInput');
+    const customEndInput   = document.getElementById('customEndInput');
+    customStartInput.addEventListener('input', onCustomStartChanged);
+    customStartInput.addEventListener('change', onCustomStartChanged);
+    customEndInput.addEventListener('input', validateCustomTimes);
+    customEndInput.addEventListener('change', validateCustomTimes);
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
@@ -3089,20 +3323,35 @@ document.addEventListener('DOMContentLoaded', function () {
         selectedDate = todayStr(); renderCalendar(); renderDayPanel();
     });
 
-    // FAB 主按鈕：開 / 關選單
+    // FAB 主按鈕：點擊直接進入或退出編輯模式
     document.getElementById('fabMain').addEventListener('click', function (e) {
         e.stopPropagation();
-        document.getElementById('fabMenu').classList.toggle('open');
+        if (editMode === 'normal') {
+            setEditMode('add'); // 預設進入快速新增
+        } else {
+            setEditMode('normal'); // 如果在編輯模式，點擊則退出
+        }
     });
 
-    // FAB 選項：切換模式後自動關閉選單
-    document.querySelectorAll('.fab-option').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            setEditMode(btn.dataset.mode);
-            document.getElementById('fabMenu').classList.remove('open');
-        });
+    // 膠囊切換按鈕事件
+    document.getElementById('modeBtnAdd').addEventListener('click', function() {
+        if (editMode !== 'add') setEditMode('add');
     });
+    document.getElementById('modeBtnDelete').addEventListener('click', function() {
+        if (editMode !== 'delete') setEditMode('delete');
+    });
+    document.getElementById('finishEditBtn').addEventListener('click', function() {
+        setEditMode('normal');
+    });
+
+    // 點擊其他地方時，不再需要關閉 fabMenu 的選單，因為選單已移除
+    // 所以可以刪除這段：
+    // document.addEventListener('click', function (e) {
+    //     if (!e.target.closest('.fab-menu')) {
+    //         const fm = document.getElementById('fabMenu');
+    //         if (fm) fm.classList.remove('open');
+    //     }
+    // });
 
     // 自訂色按鈕（行程色板）
     document.addEventListener('click', function (e) {
@@ -3119,14 +3368,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 role: role,
                 id: role === 'symbol-color' ? picker.dataset.code : picker.dataset.id
             }, currentColor);
-        }
-    });
-
-    // 點 FAB 以外的地方 → 關閉選單
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest('.fab-menu')) {
-            const fm = document.getElementById('fabMenu');
-            if (fm) fm.classList.remove('open');
         }
     });
 
@@ -3312,4 +3553,59 @@ document.getElementById('wipeTemplatesBtn').addEventListener('click', function (
     // 匯出已加入日曆的行程
     document.getElementById('exportCsvBtn').addEventListener('click', exportSchedulesToCSV);
     switchView(location.hash.replace('#', '') || 'calendar');
+
+    // 設定頁面的 Checkbox 監聽
+    document.getElementById('settingsShowDayNote').addEventListener('change', function(e) {
+        AppData.settings.showDayNote = e.target.checked;
+        saveData();
+        applySettings();
+    });
+
+    // 黑暗模式開關監聽
+    document.getElementById('settingsDarkMode').addEventListener('change', function(e) {
+        AppData.settings.darkMode = e.target.checked;
+        saveData();
+        applySettings();
+    });
+
+    // 顯示日程備註開關監聽
+    document.getElementById('settingsShowEventNote').addEventListener('change', function(e) {
+        AppData.settings.showEventNote = e.target.checked;
+        saveData();
+        applySettings();
+    });
+
+    // 彙整日程備註開關監聽
+    document.getElementById('settingsShowEventNoteInDayArea').addEventListener('change', function(e) {
+        AppData.settings.showEventNoteInDayArea = e.target.checked;
+        saveData();
+        renderCalendar(); // 重新渲染日曆
+    });
+
+    // 重置設定按鈕
+    document.getElementById('resetSettingsBtn').addEventListener('click', function() {
+        if (!confirm('確定要恢復預設介面設定嗎？\n（這不會影響你的排班資料）')) return;
+        
+        // 1. 重置介面設定
+        AppData.settings = {
+            themeColor: '#1a73e8',
+            showDayNote: true,
+            darkMode: false,
+            showEventNote: true,
+            showEventNoteInDayArea: false
+        };
+        // 👇 2. 新增這行：把色板也恢復成預設的 12 色
+        AppData.palette = DEFAULT_PALETTE.slice();
+        
+        saveData();
+        applySettings();
+        renderSettingsView();
+
+        // 如果你的模板編輯器或自訂日程編輯器正在打開，也順便重繪它們的色板
+        if (typeof renderTplColorGrid === 'function') renderTplColorGrid();
+        if (typeof renderCustomColorGrid === 'function') renderCustomColorGrid();
+
+        alert('✅ 已恢復預設設定');
+    });
+
 });
